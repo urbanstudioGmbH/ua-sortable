@@ -21,13 +21,15 @@ export class UA_Sortable {
     #containerElement        = null;
     #options                 = {};
     #draggableElements       = [];
-    #ghostElement            = null;
     #draggedElement          = null;
     #placeholderElement      = null;
     #sourceContainerElement  = null;
     #currentContainerElement = null;
     #pointerStartX           = 0;
     #pointerStartY           = 0;
+    #dragOffsetX             = 0;
+    #dragOffsetY             = 0;
+    #savedDragStyle          = "";
     #delayTimer              = null;
     #isDragging              = false;
     #childObserver           = null;
@@ -43,7 +45,7 @@ export class UA_Sortable {
      * @param {object} options
      */
     constructor(containerElement, options = {}) {
-        if (!(containerElement instanceof HTMLElement)) {
+        if (!containerElement || containerElement.nodeType !== 1) {
             throw new Error("UA_Sortable: first argument must be an HTMLElement");
         }
         if (UA_Sortable.#instanceRegistry.has(containerElement)) {
@@ -309,35 +311,36 @@ export class UA_Sortable {
         this.#currentContainerElement = this.#containerElement;
 
         const boundingRect = draggedElement.getBoundingClientRect();
-        this.#ghostElement = draggedElement.cloneNode(true);
-        this.#ghostElement.classList.add(this.#options.ghostClass);
-        this.#ghostElement.style.cssText = [
-            "position:fixed",
-            `left:${boundingRect.left}px`,
-            `top:${boundingRect.top}px`,
-            `width:${boundingRect.width}px`,
-            `height:${boundingRect.height}px`,
-            "margin:0",
-            "pointer-events:none",
-            "z-index:9999",
-        ].join(";");
-        document.body.appendChild(this.#ghostElement);
 
+        this.#dragOffsetX = pointerEvent.clientX - boundingRect.left;
+        this.#dragOffsetY = pointerEvent.clientY - boundingRect.top;
+
+        // Placeholder keeps layout space — visible drop indicator
         this.#placeholderElement = document.createElement(draggedElement.tagName);
+        this.#placeholderElement.classList.add("ua-sortable-placeholder");
         this.#placeholderElement.style.cssText = [
             `width:${boundingRect.width}px`,
             `height:${boundingRect.height}px`,
-            "opacity:0",
             "pointer-events:none",
         ].join(";");
         draggedElement.parentNode.insertBefore(this.#placeholderElement, draggedElement);
 
+        try { draggedElement.setPointerCapture(pointerEvent.pointerId); } catch (_) {}
+
+        this.#savedDragStyle = draggedElement.style.cssText;
+        draggedElement.style.cssText = [
+            "position:fixed",
+            `left:${boundingRect.left}px`,
+            `top:${boundingRect.top}px`,
+            `width:${boundingRect.width}px`,
+            "margin:0",
+            "z-index:9999",
+            "pointer-events:none",
+        ].join(";");
         draggedElement.classList.add(this.#options.dragClass);
-        draggedElement.style.opacity = "0.001";
 
         this.#containerElement.classList.add("ua-sortable-active");
-
-        try { draggedElement.setPointerCapture(pointerEvent.pointerId); } catch (_) {}
+        document.body.style.userSelect = "none";
 
         document.addEventListener("pointermove",   this.#boundHandlePointerMove);
         document.addEventListener("pointerup",     this.#boundHandlePointerUp);
@@ -349,12 +352,8 @@ export class UA_Sortable {
     #handlePointerMove(pointerEvent) {
         if (!this.#isDragging) return;
 
-        const deltaX = pointerEvent.clientX - this.#pointerStartX;
-        const deltaY = pointerEvent.clientY - this.#pointerStartY;
-
-        const originalRect = this.#draggedElement.getBoundingClientRect();
-        this.#ghostElement.style.left = `${originalRect.left + deltaX}px`;
-        this.#ghostElement.style.top  = `${originalRect.top  + deltaY}px`;
+        this.#draggedElement.style.left = `${pointerEvent.clientX - this.#dragOffsetX}px`;
+        this.#draggedElement.style.top  = `${pointerEvent.clientY - this.#dragOffsetY}px`;
 
         const targetContainer = this.#findTargetContainer(pointerEvent.clientX, pointerEvent.clientY);
         if (targetContainer && targetContainer !== this.#currentContainerElement) {
@@ -454,12 +453,11 @@ export class UA_Sortable {
     }
 
     #cleanupDragState() {
-        this.#ghostElement?.remove();
         this.#placeholderElement?.remove();
 
         if (this.#draggedElement) {
+            this.#draggedElement.style.cssText = this.#savedDragStyle;
             this.#draggedElement.classList.remove(this.#options.dragClass);
-            this.#draggedElement.style.opacity = "";
         }
 
         this.#containerElement.classList.remove("ua-sortable-active");
@@ -468,11 +466,11 @@ export class UA_Sortable {
         }
 
         clearTimeout(this.#delayTimer);
+        document.body.style.userSelect = "";
         document.removeEventListener("pointermove",   this.#boundHandlePointerMove);
         document.removeEventListener("pointerup",     this.#boundHandlePointerUp);
         document.removeEventListener("pointercancel", this.#boundHandlePointerCancel);
 
-        this.#ghostElement            = null;
         this.#placeholderElement      = null;
         this.#draggedElement          = null;
         this.#sourceContainerElement  = null;
@@ -489,7 +487,6 @@ export class UA_Sortable {
         const targetContainer = this.#currentContainerElement;
         const children = [...targetContainer.children].filter(child =>
             child !== this.#draggedElement &&
-            child !== this.#ghostElement &&
             child !== this.#placeholderElement &&
             (!this.#options.filter || !child.matches(this.#options.filter))
         );
@@ -519,10 +516,13 @@ export class UA_Sortable {
 
     #resolveDirection(containerElement) {
         if (this.#options.direction !== "auto") return this.#options.direction;
-        const flexDirection = getComputedStyle(containerElement).flexDirection;
-        return (flexDirection === "row" || flexDirection === "row-reverse")
-            ? "horizontal"
-            : "vertical";
+        const style = getComputedStyle(containerElement);
+        if (style.display === "flex" || style.display === "inline-flex") {
+            return (style.flexDirection === "row" || style.flexDirection === "row-reverse")
+                ? "horizontal"
+                : "vertical";
+        }
+        return "vertical";
     }
 
     #findDraggableParent(targetElement) {
@@ -563,8 +563,8 @@ export class UA_Sortable {
     const style = document.createElement("style");
     style.id = "ua-sortable-styles";
     style.textContent = [
-        ".ua-sortable-ghost{opacity:.4;}",
-        ".ua-sortable-drag{opacity:.4;}",
+        ".ua-sortable-drag{opacity:.95;box-shadow:0 8px 24px rgba(0,0,0,.18);transition:box-shadow .15s;}",
+        ".ua-sortable-placeholder{border:2px dashed rgba(0,0,0,.18);border-radius:3px;box-sizing:border-box;background:rgba(0,0,0,.03);}",
         ".ua-sortable-active>.ua-sortable-over{border-top:2px solid var(--accent,#2563eb);}",
         ".ua-drag-handle{cursor:grab;touch-action:none;}",
         ".ua-drag-handle:active{cursor:grabbing;}",

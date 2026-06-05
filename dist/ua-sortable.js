@@ -38,13 +38,15 @@
         #containerElement        = null;
         #options                 = {};
         #draggableElements       = [];
-        #ghostElement            = null;
         #draggedElement          = null;
         #placeholderElement      = null;
         #sourceContainerElement  = null;
         #currentContainerElement = null;
         #pointerStartX           = 0;
         #pointerStartY           = 0;
+        #dragOffsetX             = 0;
+        #dragOffsetY             = 0;
+        #savedDragStyle          = "";
         #delayTimer              = null;
         #isDragging              = false;
         #childObserver           = null;
@@ -54,7 +56,7 @@
         #boundHandlePointerCancel = null;
 
         constructor(containerElement, options = {}) {
-            if (!(containerElement instanceof HTMLElement)) {
+            if (!containerElement || containerElement.nodeType !== 1) {
                 throw new Error("UA_Sortable: first argument must be an HTMLElement");
             }
             if (UA_Sortable.#instanceRegistry.has(containerElement)) {
@@ -212,17 +214,18 @@
             this.#sourceContainerElement = this.#containerElement;
             this.#currentContainerElement = this.#containerElement;
             const r = dragged.getBoundingClientRect();
-            this.#ghostElement = dragged.cloneNode(true);
-            this.#ghostElement.classList.add(this.#options.ghostClass);
-            this.#ghostElement.style.cssText = `position:fixed;left:${r.left}px;top:${r.top}px;width:${r.width}px;height:${r.height}px;margin:0;pointer-events:none;z-index:9999;`;
-            document.body.appendChild(this.#ghostElement);
+            this.#dragOffsetX = e.clientX - r.left;
+            this.#dragOffsetY = e.clientY - r.top;
             this.#placeholderElement = document.createElement(dragged.tagName);
-            this.#placeholderElement.style.cssText = `width:${r.width}px;height:${r.height}px;opacity:0;pointer-events:none;`;
+            this.#placeholderElement.classList.add("ua-sortable-placeholder");
+            this.#placeholderElement.style.cssText = `width:${r.width}px;height:${r.height}px;pointer-events:none;`;
             dragged.parentNode.insertBefore(this.#placeholderElement, dragged);
-            dragged.classList.add(this.#options.dragClass);
-            dragged.style.opacity = "0.001";
-            this.#containerElement.classList.add("ua-sortable-active");
             try { dragged.setPointerCapture(e.pointerId); } catch (_) {}
+            this.#savedDragStyle = dragged.style.cssText;
+            dragged.style.cssText = `position:fixed;left:${r.left}px;top:${r.top}px;width:${r.width}px;margin:0;z-index:9999;pointer-events:none;`;
+            dragged.classList.add(this.#options.dragClass);
+            this.#containerElement.classList.add("ua-sortable-active");
+            document.body.style.userSelect = "none";
             document.addEventListener("pointermove",   this.#boundHandlePointerMove);
             document.addEventListener("pointerup",     this.#boundHandlePointerUp);
             document.addEventListener("pointercancel", this.#boundHandlePointerCancel);
@@ -230,10 +233,8 @@
         }
         #handlePointerMove(e) {
             if (!this.#isDragging) return;
-            const dx = e.clientX - this.#pointerStartX, dy = e.clientY - this.#pointerStartY;
-            const or = this.#draggedElement.getBoundingClientRect();
-            this.#ghostElement.style.left = `${or.left + dx}px`;
-            this.#ghostElement.style.top  = `${or.top  + dy}px`;
+            this.#draggedElement.style.left = `${e.clientX - this.#dragOffsetX}px`;
+            this.#draggedElement.style.top  = `${e.clientY - this.#dragOffsetY}px`;
             const tc = this.#findTargetContainer(e.clientX, e.clientY);
             if (tc && tc !== this.#currentContainerElement) {
                 this.#currentContainerElement.classList.remove("ua-sortable-active");
@@ -281,28 +282,28 @@
             return await Promise.resolve(this.#options.onMove(id, from, to, fromIds, toIds)) !== false;
         }
         #cleanupDragState() {
-            this.#ghostElement?.remove();
             this.#placeholderElement?.remove();
             if (this.#draggedElement) {
+                this.#draggedElement.style.cssText = this.#savedDragStyle;
                 this.#draggedElement.classList.remove(this.#options.dragClass);
-                this.#draggedElement.style.opacity = "";
             }
             this.#containerElement.classList.remove("ua-sortable-active");
             if (this.#currentContainerElement && this.#currentContainerElement !== this.#containerElement) {
                 this.#currentContainerElement.classList.remove("ua-sortable-active");
             }
             clearTimeout(this.#delayTimer);
+            document.body.style.userSelect = "";
             document.removeEventListener("pointermove",   this.#boundHandlePointerMove);
             document.removeEventListener("pointerup",     this.#boundHandlePointerUp);
             document.removeEventListener("pointercancel", this.#boundHandlePointerCancel);
-            this.#ghostElement = this.#placeholderElement = this.#draggedElement =
+            this.#placeholderElement = this.#draggedElement =
             this.#sourceContainerElement = this.#currentContainerElement = this.#delayTimer = null;
             this.#isDragging = false;
         }
         #updatePlaceholderPosition(px, py) {
             const tc = this.#currentContainerElement;
             const children = [...tc.children].filter(c =>
-                c !== this.#draggedElement && c !== this.#ghostElement &&
+                c !== this.#draggedElement &&
                 c !== this.#placeholderElement &&
                 (!this.#options.filter || !c.matches(this.#options.filter))
             );
@@ -317,8 +318,11 @@
         }
         #resolveDirection(el) {
             if (this.#options.direction !== "auto") return this.#options.direction;
-            const fd = getComputedStyle(el).flexDirection;
-            return (fd === "row" || fd === "row-reverse") ? "horizontal" : "vertical";
+            const style = getComputedStyle(el);
+            if (style.display === "flex" || style.display === "inline-flex") {
+                return (style.flexDirection === "row" || style.flexDirection === "row-reverse") ? "horizontal" : "vertical";
+            }
+            return "vertical";
         }
         #findDraggableParent(el) {
             let c = el;
@@ -344,7 +348,7 @@
     if (typeof document !== "undefined" && !document.getElementById("ua-sortable-styles")) {
         const s = document.createElement("style");
         s.id = "ua-sortable-styles";
-        s.textContent = ".ua-sortable-ghost{opacity:.4;}.ua-sortable-drag{opacity:.4;}.ua-sortable-active>.ua-sortable-over{border-top:2px solid var(--accent,#2563eb);}.ua-drag-handle{cursor:grab;touch-action:none;}.ua-drag-handle:active{cursor:grabbing;}";
+        s.textContent = ".ua-sortable-drag{opacity:.95;box-shadow:0 8px 24px rgba(0,0,0,.18);transition:box-shadow .15s;}.ua-sortable-placeholder{border:2px dashed rgba(0,0,0,.18);border-radius:3px;box-sizing:border-box;background:rgba(0,0,0,.03);}.ua-sortable-active>.ua-sortable-over{border-top:2px solid var(--accent,#2563eb);}.ua-drag-handle{cursor:grab;touch-action:none;}.ua-drag-handle:active{cursor:grabbing;}";
         document.head.appendChild(s);
     }
 

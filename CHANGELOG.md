@@ -7,6 +7,18 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.0.1] — 2026-06-05
+
+### Fixed
+- Drag direction detection: `direction: "auto"` now checks `display:flex/inline-flex` before reading `flex-direction` — previously non-flex containers were incorrectly detected as `horizontal` (CSS default value for `flex-direction` is `row` even on block elements)
+- Placeholder now visible during drag as a dashed drop-indicator box (was `visibility:hidden`)
+- `setPointerCapture` is now called before `pointer-events:none` is applied — fixes drag-down failing in some browsers
+- Text selection during drag suppressed via `document.body.style.userSelect = "none"`
+- Cross-frame compatibility: `instanceof HTMLElement` replaced with `nodeType === 1` check
+- Original element is now used as its own drag ghost (no `cloneNode`) — renders with all inherited CSS intact
+
+---
+
 ## [1.0.0] — 2026-06-05
 
 ### Added
