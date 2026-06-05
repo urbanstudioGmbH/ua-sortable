@@ -13,8 +13,8 @@ No dependencies. No jQuery. No CDN required. Pure browser APIs.
 
 `UA_Sortable` makes any list or grid container sortable by drag-and-drop using native [Pointer Events](https://developer.mozilla.org/en-US/docs/Web/API/Pointer_events). Works with mouse, touch, and stylus — no special handling needed.
 
-```
-ua-sortable run myList
+```js
+new UA_Sortable(document.getElementById("myList"));
 ```
 
 That is: one line to get a sortable list, one callback to persist the order, zero dependencies.
