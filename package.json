@@ -1,0 +1,50 @@
+{
+  "name": "@urbanstudio/ua-sortable",
+  "version": "1.0.0",
+  "description": "Pointer-Events-based drag-and-drop sorting for lists and grids. No dependencies.",
+  "author": "Marian Feiler <mf@urbanstudio.de> (https://urbanstudio.de)",
+  "license": "MIT",
+  "homepage": "https://github.com/urbanstudioGmbH/ua-sortable#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/urbanstudioGmbH/ua-sortable.git"
+  },
+  "bugs": {
+    "url": "https://github.com/urbanstudioGmbH/ua-sortable/issues"
+  },
+  "type": "module",
+  "main": "./dist/ua-sortable.js",
+  "module": "./src/Sortable.js",
+  "exports": {
+    ".": {
+      "import": "./src/Sortable.js",
+      "require": "./dist/ua-sortable.js"
+    },
+    "./dist": "./dist/ua-sortable.js"
+  },
+  "files": [
+    "src/",
+    "dist/",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
+  "keywords": [
+    "drag-and-drop",
+    "sortable",
+    "sort",
+    "reorder",
+    "drag",
+    "pointer-events",
+    "touch",
+    "es6-module",
+    "zero-dependency",
+    "vanilla-js",
+    "list",
+    "grid"
+  ],
+  "sideEffects": false,
+  "engines": {
+    "node": ">=14"
+  }
+}
