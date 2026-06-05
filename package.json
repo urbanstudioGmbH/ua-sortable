@@ -7,7 +7,7 @@
   "homepage": "https://github.com/urbanstudioGmbH/ua-sortable#readme",
   "repository": {
     "type": "git",
-    "url": "https://github.com/urbanstudioGmbH/ua-sortable.git"
+    "url": "git+https://github.com/urbanstudioGmbH/ua-sortable.git"
   },
   "bugs": {
     "url": "https://github.com/urbanstudioGmbH/ua-sortable/issues"
