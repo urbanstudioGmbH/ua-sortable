@@ -1,5 +1,5 @@
 /**
- * UA_Sortable v1.0.2 — IIFE build (browser global)
+ * UA_Sortable v1.0.3 — IIFE build (browser global)
  * Pointer-Events-based drag-and-drop sorting. No dependencies.
  *
  * @author  Marian Feiler <mf@urbanstudio.de>
@@ -50,6 +50,9 @@
         #delayTimer              = null;
         #isDragging              = false;
         #childObserver           = null;
+        #rafId                   = null;
+        #rafX                    = 0;
+        #rafY                    = 0;
         #boundHandlePointerDown   = null;
         #boundHandlePointerMove   = null;
         #boundHandlePointerUp     = null;
@@ -221,7 +224,7 @@
             this.#dragOffsetY = e.clientY - r.top;
             this.#placeholderElement = document.createElement(dragged.tagName);
             this.#placeholderElement.classList.add("ua-sortable-placeholder");
-            this.#placeholderElement.style.cssText = `width:${r.width}px;height:${r.height}px;pointer-events:none;`;
+            this.#placeholderElement.style.cssText = `width:${r.width}px;height:${r.height}px;align-self:start;pointer-events:none;`;
             dragged.parentNode.insertBefore(this.#placeholderElement, dragged);
             try { dragged.setPointerCapture(e.pointerId); } catch (_) {}
             this.#savedDragStyle = dragged.style.cssText;
@@ -244,7 +247,14 @@
                 tc.classList.add("ua-sortable-active");
                 this.#currentContainerElement = tc;
             }
-            this.#updatePlaceholderPosition(e.clientX, e.clientY);
+            this.#rafX = e.clientX;
+            this.#rafY = e.clientY;
+            if (!this.#rafId) {
+                this.#rafId = requestAnimationFrame(() => {
+                    this.#rafId = null;
+                    if (this.#isDragging) this.#updatePlaceholderPosition(this.#rafX, this.#rafY);
+                });
+            }
         }
         #handlePointerUp()     { if (this.#isDragging) this.#finalizeDrop(); }
         #handlePointerCancel() { if (this.#isDragging) this.#revertDrag(); }
@@ -299,6 +309,7 @@
                 this.#currentContainerElement.classList.remove("ua-sortable-active");
             }
             clearTimeout(this.#delayTimer);
+            if (this.#rafId) { cancelAnimationFrame(this.#rafId); this.#rafId = null; }
             document.body.style.userSelect = "";
             document.removeEventListener("pointermove",   this.#boundHandlePointerMove);
             document.removeEventListener("pointerup",     this.#boundHandlePointerUp);
@@ -317,10 +328,19 @@
             const dir = this.#resolveDirection(tc);
             let before = null;
             if (dir === "grid") {
+                let hi = -1;
                 for (let i = 0; i < children.length; i++) {
                     const r = children[i].getBoundingClientRect();
-                    if (py < r.top) { before = children[i]; break; }
-                    if (py <= r.bottom) { before = (px < r.left + r.width / 2) ? children[i] : (children[i + 1] ?? null); break; }
+                    if (px >= r.left && px <= r.right && py >= r.top && py <= r.bottom) { hi = i; break; }
+                }
+                if (hi >= 0) {
+                    const r = children[hi].getBoundingClientRect();
+                    before = (px < r.left + r.width / 2) ? children[hi] : (children[hi + 1] ?? null);
+                } else {
+                    for (let i = 0; i < children.length; i++) {
+                        const r = children[i].getBoundingClientRect();
+                        if (py < r.top) { before = children[i]; break; }
+                    }
                 }
             } else {
                 for (const s of children) {
@@ -329,7 +349,11 @@
                     if ((dir === "horizontal" ? px : py) < mid) { before = s; break; }
                 }
             }
-            before ? tc.insertBefore(this.#placeholderElement, before) : tc.appendChild(this.#placeholderElement);
+            if (before) {
+                if (this.#placeholderElement.nextSibling !== before) tc.insertBefore(this.#placeholderElement, before);
+            } else {
+                if (tc.lastElementChild !== this.#placeholderElement) tc.appendChild(this.#placeholderElement);
+            }
         }
         #resolveDirection(el) {
             if (this.#options.direction !== "auto") return this.#options.direction;

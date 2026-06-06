@@ -7,6 +7,16 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.0.3] — 2026-06-06
+
+### Fixed
+- **Grid placeholder height**: Added `align-self:start` to prevent grid containers from stretching the placeholder to full row height.
+- **Grid placeholder position**: Replaced row-based Y-scan with an exact X+Y hit-test to find the hovered cell — placeholder now correctly follows the pointer across all columns, not just the first.
+- **Drag flicker**: `#updatePlaceholderPosition` is now throttled via `requestAnimationFrame` — DOM insertions only happen once per frame instead of on every `pointermove` event. Ghost element position still updates immediately.
+- **Redundant DOM moves**: Placeholder `insertBefore`/`appendChild` is skipped when the placeholder is already in the correct position.
+
+---
+
 ## [1.0.2] — 2026-06-06
 
 ### Fixed

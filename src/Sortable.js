@@ -1,7 +1,7 @@
 "use strict";
 
 /**
- * UA_Sortable — Pointer-Events-based drag-and-drop sorting for lists and grids.
+ * UA_Sortable v1.0.3 — Pointer-Events-based drag-and-drop sorting for lists and grids.
  * No dependencies — no jQuery, no CDN, no external frameworks.
  * Supports: simple sorting, cross-list groups, auto-direction, filter, delay.
  *
@@ -33,6 +33,9 @@ export class UA_Sortable {
     #delayTimer              = null;
     #isDragging              = false;
     #childObserver           = null;
+    #rafId                   = null;
+    #rafX                    = 0;
+    #rafY                    = 0;
 
     // Bound handler references for clean removeEventListener
     #boundHandlePointerDown   = null;
@@ -324,6 +327,7 @@ export class UA_Sortable {
         this.#placeholderElement.style.cssText = [
             `width:${boundingRect.width}px`,
             `height:${boundingRect.height}px`,
+            "align-self:start",
             "pointer-events:none",
         ].join(";");
         draggedElement.parentNode.insertBefore(this.#placeholderElement, draggedElement);
@@ -365,7 +369,14 @@ export class UA_Sortable {
             this.#currentContainerElement = targetContainer;
         }
 
-        this.#updatePlaceholderPosition(pointerEvent.clientX, pointerEvent.clientY);
+        this.#rafX = pointerEvent.clientX;
+        this.#rafY = pointerEvent.clientY;
+        if (!this.#rafId) {
+            this.#rafId = requestAnimationFrame(() => {
+                this.#rafId = null;
+                if (this.#isDragging) this.#updatePlaceholderPosition(this.#rafX, this.#rafY);
+            });
+        }
     }
 
     #handlePointerUp() {
@@ -472,6 +483,7 @@ export class UA_Sortable {
         }
 
         clearTimeout(this.#delayTimer);
+        if (this.#rafId) { cancelAnimationFrame(this.#rafId); this.#rafId = null; }
         document.body.style.userSelect = "";
         document.removeEventListener("pointermove",   this.#boundHandlePointerMove);
         document.removeEventListener("pointerup",     this.#boundHandlePointerUp);
@@ -501,14 +513,25 @@ export class UA_Sortable {
         let insertBeforeElement = null;
 
         if (direction === "grid") {
+            // Find the item directly under the pointer (exact X+Y hit test)
+            let hoveredIndex = -1;
             for (let i = 0; i < children.length; i++) {
                 const r = children[i].getBoundingClientRect();
-                if (pointerY < r.top) { insertBeforeElement = children[i]; break; }
-                if (pointerY <= r.bottom) {
-                    insertBeforeElement = (pointerX < r.left + r.width / 2)
-                        ? children[i]
-                        : (children[i + 1] ?? null);
+                if (pointerX >= r.left && pointerX <= r.right && pointerY >= r.top && pointerY <= r.bottom) {
+                    hoveredIndex = i;
                     break;
+                }
+            }
+            if (hoveredIndex >= 0) {
+                const r = children[hoveredIndex].getBoundingClientRect();
+                insertBeforeElement = (pointerX < r.left + r.width / 2)
+                    ? children[hoveredIndex]
+                    : (children[hoveredIndex + 1] ?? null);
+            } else {
+                // Pointer is in a gap — find next row by Y
+                for (let i = 0; i < children.length; i++) {
+                    const r = children[i].getBoundingClientRect();
+                    if (pointerY < r.top) { insertBeforeElement = children[i]; break; }
                 }
             }
         } else {
@@ -527,9 +550,13 @@ export class UA_Sortable {
         }
 
         if (insertBeforeElement) {
-            targetContainer.insertBefore(this.#placeholderElement, insertBeforeElement);
+            if (this.#placeholderElement.nextSibling !== insertBeforeElement) {
+                targetContainer.insertBefore(this.#placeholderElement, insertBeforeElement);
+            }
         } else {
-            targetContainer.appendChild(this.#placeholderElement);
+            if (targetContainer.lastElementChild !== this.#placeholderElement) {
+                targetContainer.appendChild(this.#placeholderElement);
+            }
         }
     }
 
