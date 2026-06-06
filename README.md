@@ -90,14 +90,13 @@ Or declarative HTML — auto-initialized by `UA_Sortable.observe()`:
 | `handle` | `string\|null` | `null` | CSS selector for drag handle. `null` = whole item is draggable. |
 | `filter` | `string\|null` | `null` | CSS selector for items excluded from drag. |
 | `group` | `string\|null` | `null` | Group name for cross-list drag. |
-| `direction` | `string` | `"auto"` | `"vertical"`, `"horizontal"`, or `"auto"` (reads `flex-direction`). |
+| `direction` | `string` | `"auto"` | `"vertical"`, `"horizontal"`, or `"auto"` (detects `flex-direction`; `grid`/`inline-grid` containers are treated as grid). |
 | `animation` | `number` | `150` | Ghost transition duration in ms. `0` = disabled. |
 | `dataIdAttr` | `string` | `"data-id"` | Attribute used to identify items in callbacks. |
 | `delay` | `number` | `0` | ms before drag starts after pointerdown. |
 | `delayOnTouchOnly` | `boolean` | `false` | Apply `delay` only for touch input. |
 | `disabled` | `boolean` | `false` | Disable drag on this instance. |
-| `ghostClass` | `string` | `"ua-sortable-ghost"` | Class added to the ghost clone. |
-| `dragClass` | `string` | `"ua-sortable-drag"` | Class added to the dragged item. |
+| `dragClass` | `string` | `"ua-sortable-drag"` | Class added to the dragged item while dragging. |
 | `confirm` | `function\|null` | `null` | `(movedId, from, to) => Promise<bool>` — called before cross-list drop. Return `false` to cancel. |
 | `onDragStart` | `function\|null` | `null` | `(el)` — drag begins. |
 | `onDragEnd` | `function\|null` | `null` | `(el, didMove: bool)` — drag ends. |
@@ -178,10 +177,10 @@ state.forEach(({ container, ids }) => {
 Minimal styles are **injected automatically** on first use — no stylesheet to include.
 
 ```css
-.ua-sortable-ghost      { opacity: .4; }
-.ua-sortable-drag       { opacity: .4; }
-.ua-drag-handle         { cursor: grab; touch-action: none; }
-.ua-drag-handle:active  { cursor: grabbing; }
+.ua-sortable-drag        { opacity: .95; box-shadow: 0 8px 24px rgba(0,0,0,.18); }
+.ua-sortable-placeholder { border: 2px dashed rgba(0,0,0,.18); border-radius: 3px; background: rgba(0,0,0,.03); }
+.ua-drag-handle          { cursor: grab; touch-action: none; }
+.ua-drag-handle:active   { cursor: grabbing; }
 ```
 
 The drop indicator uses `--accent` (CSS custom property) with fallback `#2563eb`.  

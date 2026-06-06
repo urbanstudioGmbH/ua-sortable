@@ -7,6 +7,17 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.0.2] — 2026-06-06
+
+### Fixed
+- **Filter — nested descendants**: `filter` option now uses `closest()` so clicking any descendant of a filtered element (e.g. a button inside a `.btngroup`) correctly suppresses drag start. Previously only exact-match elements were excluded.
+- **Grid containers**: `direction: "auto"` now correctly detects `display:grid` and `display:inline-grid` containers and uses 2D placeholder positioning. Previously grid containers fell through to the vertical path.
+- **Grid placeholder position**: When dragging in a grid, the placeholder is inserted after the hovered cell when the pointer is on the right half — previously always inserted before.
+- **Confirm dialog freeze**: Pointer listeners (`pointermove`, `pointerup`, `pointercancel`) are now removed before awaiting the `confirm` callback, preventing ghost movement during the dialog.
+- **Cross-container revert**: `#revertDrag` no longer calls `insertBefore` for cross-container drops (item is already in the source container); only same-container reverts move the element back.
+
+---
+
 ## [1.0.1] — 2026-06-05
 
 ### Fixed

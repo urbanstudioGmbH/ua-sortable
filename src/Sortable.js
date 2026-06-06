@@ -271,7 +271,10 @@ export class UA_Sortable {
         const draggedElement = this.#findDraggableParent(pointerEvent.target);
         if (!draggedElement) return;
 
-        if (this.#options.filter && draggedElement.matches(this.#options.filter)) return;
+        if (this.#options.filter) {
+            if (draggedElement.matches(this.#options.filter)) return;
+            if (pointerEvent.target.closest(this.#options.filter)) return;
+        }
 
         if (this.#options.handle) {
             const handleElement = pointerEvent.target.closest(this.#options.handle);
@@ -386,6 +389,11 @@ export class UA_Sortable {
         const didChangeContainer     = sourceContainerElement !== targetContainerElement;
 
         if (didChangeContainer && this.#options.confirm !== null) {
+            // Freeze drag movement during async confirm dialog
+            document.removeEventListener("pointermove",   this.#boundHandlePointerMove);
+            document.removeEventListener("pointerup",     this.#boundHandlePointerUp);
+            document.removeEventListener("pointercancel", this.#boundHandlePointerCancel);
+
             const confirmFunction = this.#options.confirm;
             const confirmed = await Promise.resolve(
                 confirmFunction(
@@ -433,13 +441,11 @@ export class UA_Sortable {
     }
 
     #revertDrag() {
-        if (this.#placeholderElement?.parentNode) {
-            this.#placeholderElement.parentNode.insertBefore(
-                this.#draggedElement,
-                this.#placeholderElement
-            );
-        }
         const draggedElement = this.#draggedElement;
+        const isCrossContainer = this.#sourceContainerElement !== this.#currentContainerElement;
+        if (!isCrossContainer && this.#placeholderElement?.parentNode) {
+            this.#placeholderElement.parentNode.insertBefore(draggedElement, this.#placeholderElement);
+        }
         this.#cleanupDragState();
         this.#options.onDragEnd?.(draggedElement, false);
     }
@@ -494,16 +500,29 @@ export class UA_Sortable {
         const direction = this.#resolveDirection(targetContainer);
         let insertBeforeElement = null;
 
-        for (const sibling of children) {
-            const siblingRect     = sibling.getBoundingClientRect();
-            const siblingMidpoint = direction === "horizontal"
-                ? siblingRect.left + siblingRect.width  / 2
-                : siblingRect.top  + siblingRect.height / 2;
-            const pointerPosition = direction === "horizontal" ? pointerX : pointerY;
+        if (direction === "grid") {
+            for (let i = 0; i < children.length; i++) {
+                const r = children[i].getBoundingClientRect();
+                if (pointerY < r.top) { insertBeforeElement = children[i]; break; }
+                if (pointerY <= r.bottom) {
+                    insertBeforeElement = (pointerX < r.left + r.width / 2)
+                        ? children[i]
+                        : (children[i + 1] ?? null);
+                    break;
+                }
+            }
+        } else {
+            for (const sibling of children) {
+                const siblingRect = sibling.getBoundingClientRect();
+                const siblingMidpoint = direction === "horizontal"
+                    ? siblingRect.left + siblingRect.width  / 2
+                    : siblingRect.top  + siblingRect.height / 2;
+                const pointerPosition = direction === "horizontal" ? pointerX : pointerY;
 
-            if (pointerPosition < siblingMidpoint) {
-                insertBeforeElement = sibling;
-                break;
+                if (pointerPosition < siblingMidpoint) {
+                    insertBeforeElement = sibling;
+                    break;
+                }
             }
         }
 
@@ -517,6 +536,7 @@ export class UA_Sortable {
     #resolveDirection(containerElement) {
         if (this.#options.direction !== "auto") return this.#options.direction;
         const style = getComputedStyle(containerElement);
+        if (style.display === "grid" || style.display === "inline-grid") return "grid";
         if (style.display === "flex" || style.display === "inline-flex") {
             return (style.flexDirection === "row" || style.flexDirection === "row-reverse")
                 ? "horizontal"

@@ -1,5 +1,5 @@
 /**
- * UA_Sortable v1.0.0 — IIFE build (browser global)
+ * UA_Sortable v1.0.2 — IIFE build (browser global)
  * Pointer-Events-based drag-and-drop sorting. No dependencies.
  *
  * @author  Marian Feiler <mf@urbanstudio.de>
@@ -187,7 +187,10 @@
             if (e.button !== 0 && e.pointerType === "mouse") return;
             const dragged = this.#findDraggableParent(e.target);
             if (!dragged) return;
-            if (this.#options.filter && dragged.matches(this.#options.filter)) return;
+            if (this.#options.filter) {
+                if (dragged.matches(this.#options.filter)) return;
+                if (e.target.closest(this.#options.filter)) return;
+            }
             if (this.#options.handle) {
                 const h = e.target.closest(this.#options.handle);
                 if (!h || !dragged.contains(h)) return;
@@ -251,6 +254,9 @@
             const tgt = this.#currentContainerElement;
             const moved = src !== tgt;
             if (moved && this.#options.confirm) {
+                document.removeEventListener("pointermove",   this.#boundHandlePointerMove);
+                document.removeEventListener("pointerup",     this.#boundHandlePointerUp);
+                document.removeEventListener("pointercancel", this.#boundHandlePointerCancel);
                 const ok = await Promise.resolve(this.#options.confirm(dragged.getAttribute(this.#options.dataIdAttr), src, tgt));
                 if (!ok) { this.#revertDrag(); return; }
             }
@@ -270,10 +276,11 @@
             this.#options.onDragEnd?.(dragged, true);
         }
         #revertDrag() {
-            if (this.#placeholderElement?.parentNode) {
-                this.#placeholderElement.parentNode.insertBefore(this.#draggedElement, this.#placeholderElement);
-            }
             const d = this.#draggedElement;
+            const isCross = this.#sourceContainerElement !== this.#currentContainerElement;
+            if (!isCross && this.#placeholderElement?.parentNode) {
+                this.#placeholderElement.parentNode.insertBefore(d, this.#placeholderElement);
+            }
             this.#cleanupDragState();
             this.#options.onDragEnd?.(d, false);
         }
@@ -309,16 +316,25 @@
             );
             const dir = this.#resolveDirection(tc);
             let before = null;
-            for (const s of children) {
-                const sr  = s.getBoundingClientRect();
-                const mid = dir === "horizontal" ? sr.left + sr.width / 2 : sr.top + sr.height / 2;
-                if ((dir === "horizontal" ? px : py) < mid) { before = s; break; }
+            if (dir === "grid") {
+                for (let i = 0; i < children.length; i++) {
+                    const r = children[i].getBoundingClientRect();
+                    if (py < r.top) { before = children[i]; break; }
+                    if (py <= r.bottom) { before = (px < r.left + r.width / 2) ? children[i] : (children[i + 1] ?? null); break; }
+                }
+            } else {
+                for (const s of children) {
+                    const sr  = s.getBoundingClientRect();
+                    const mid = dir === "horizontal" ? sr.left + sr.width / 2 : sr.top + sr.height / 2;
+                    if ((dir === "horizontal" ? px : py) < mid) { before = s; break; }
+                }
             }
             before ? tc.insertBefore(this.#placeholderElement, before) : tc.appendChild(this.#placeholderElement);
         }
         #resolveDirection(el) {
             if (this.#options.direction !== "auto") return this.#options.direction;
             const style = getComputedStyle(el);
+            if (style.display === "grid" || style.display === "inline-grid") return "grid";
             if (style.display === "flex" || style.display === "inline-flex") {
                 return (style.flexDirection === "row" || style.flexDirection === "row-reverse") ? "horizontal" : "vertical";
             }
