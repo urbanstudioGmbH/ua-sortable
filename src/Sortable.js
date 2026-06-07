@@ -1,7 +1,7 @@
 "use strict";
 
 /**
- * UA_Sortable v1.0.3 — Pointer-Events-based drag-and-drop sorting for lists and grids.
+ * UA_Sortable v1.0.4 — Pointer-Events-based drag-and-drop sorting for lists and grids.
  * No dependencies — no jQuery, no CDN, no external frameworks.
  * Supports: simple sorting, cross-list groups, auto-direction, filter, delay.
  *
@@ -36,6 +36,7 @@ export class UA_Sortable {
     #rafId                   = null;
     #rafX                    = 0;
     #rafY                    = 0;
+    #layoutAnimations        = new Map();
 
     // Bound handler references for clean removeEventListener
     #boundHandlePointerDown   = null;
@@ -484,6 +485,8 @@ export class UA_Sortable {
 
         clearTimeout(this.#delayTimer);
         if (this.#rafId) { cancelAnimationFrame(this.#rafId); this.#rafId = null; }
+        this.#layoutAnimations.forEach(animation => animation.cancel());
+        this.#layoutAnimations.clear();
         document.body.style.userSelect = "";
         document.removeEventListener("pointermove",   this.#boundHandlePointerMove);
         document.removeEventListener("pointerup",     this.#boundHandlePointerUp);
@@ -513,27 +516,7 @@ export class UA_Sortable {
         let insertBeforeElement = null;
 
         if (direction === "grid") {
-            // Find the item directly under the pointer (exact X+Y hit test)
-            let hoveredIndex = -1;
-            for (let i = 0; i < children.length; i++) {
-                const r = children[i].getBoundingClientRect();
-                if (pointerX >= r.left && pointerX <= r.right && pointerY >= r.top && pointerY <= r.bottom) {
-                    hoveredIndex = i;
-                    break;
-                }
-            }
-            if (hoveredIndex >= 0) {
-                const r = children[hoveredIndex].getBoundingClientRect();
-                insertBeforeElement = (pointerX < r.left + r.width / 2)
-                    ? children[hoveredIndex]
-                    : (children[hoveredIndex + 1] ?? null);
-            } else {
-                // Pointer is in a gap — find next row by Y
-                for (let i = 0; i < children.length; i++) {
-                    const r = children[i].getBoundingClientRect();
-                    if (pointerY < r.top) { insertBeforeElement = children[i]; break; }
-                }
-            }
+            insertBeforeElement = this.#getGridInsertBeforeElement(children, pointerX, pointerY);
         } else {
             for (const sibling of children) {
                 const siblingRect = sibling.getBoundingClientRect();
@@ -551,13 +534,123 @@ export class UA_Sortable {
 
         if (insertBeforeElement) {
             if (this.#placeholderElement.nextSibling !== insertBeforeElement) {
-                targetContainer.insertBefore(this.#placeholderElement, insertBeforeElement);
+                this.#animateLayoutChange(targetContainer, () => {
+                    targetContainer.insertBefore(this.#placeholderElement, insertBeforeElement);
+                });
             }
         } else {
             if (targetContainer.lastElementChild !== this.#placeholderElement) {
-                targetContainer.appendChild(this.#placeholderElement);
+                this.#animateLayoutChange(targetContainer, () => {
+                    targetContainer.appendChild(this.#placeholderElement);
+                });
             }
         }
+    }
+
+    #animateLayoutChange(containerElement, changeDOM) {
+        const duration = Number(this.#options.animation) || 0;
+        if (duration <= 0 || typeof Element === "undefined" || !Element.prototype.animate) {
+            changeDOM();
+            return;
+        }
+
+        const getAnimatedChildren = () => [...containerElement.children].filter(child =>
+            child !== this.#draggedElement &&
+            child !== this.#placeholderElement &&
+            (!this.#options.filter || !child.matches(this.#options.filter))
+        );
+
+        const firstRects = new Map(
+            getAnimatedChildren().map(child => [child, child.getBoundingClientRect()])
+        );
+
+        changeDOM();
+
+        for (const child of getAnimatedChildren()) {
+            const firstRect = firstRects.get(child);
+            if (!firstRect) continue;
+
+            const lastRect = child.getBoundingClientRect();
+            const deltaX = firstRect.left - lastRect.left;
+            const deltaY = firstRect.top - lastRect.top;
+            if (Math.abs(deltaX) < 0.5 && Math.abs(deltaY) < 0.5) continue;
+
+            this.#layoutAnimations.get(child)?.cancel();
+            const animation = child.animate(
+                [
+                    { transform: `translate(${deltaX}px, ${deltaY}px)` },
+                    { transform: "translate(0, 0)" },
+                ],
+                {
+                    duration,
+                    easing: "ease",
+                    fill: "both",
+                }
+            );
+            this.#layoutAnimations.set(child, animation);
+            animation.finished
+                .catch(() => {})
+                .finally(() => {
+                    if (this.#layoutAnimations.get(child) === animation) {
+                        this.#layoutAnimations.delete(child);
+                    }
+                });
+        }
+    }
+
+    #getGridInsertBeforeElement(children, pointerX, pointerY) {
+        if (!children.length) return null;
+
+        const rowTolerance = 4;
+        const rows = [];
+
+        for (const element of children) {
+            const rect = element.getBoundingClientRect();
+            let row = rows.find(candidate => Math.abs(candidate.top - rect.top) <= rowTolerance);
+
+            if (!row) {
+                row = { top: rect.top, bottom: rect.bottom, items: [] };
+                rows.push(row);
+            }
+
+            row.top = Math.min(row.top, rect.top);
+            row.bottom = Math.max(row.bottom, rect.bottom);
+            row.items.push({ element, rect });
+        }
+
+        rows.sort((a, b) => a.top - b.top);
+        rows.forEach(row => row.items.sort((a, b) => a.rect.left - b.rect.left));
+
+        let targetRow = rows[rows.length - 1];
+
+        for (let i = 0; i < rows.length; i++) {
+            const row = rows[i];
+            const nextRow = rows[i + 1] ?? null;
+
+            if (pointerY < row.top) {
+                targetRow = row;
+                break;
+            }
+            if (pointerY <= row.bottom) {
+                targetRow = row;
+                break;
+            }
+            if (nextRow && pointerY < nextRow.top) {
+                targetRow = pointerY < row.bottom + (nextRow.top - row.bottom) / 2
+                    ? row
+                    : nextRow;
+                break;
+            }
+        }
+
+        for (const item of targetRow.items) {
+            if (pointerX < item.rect.left + item.rect.width / 2) {
+                return item.element;
+            }
+        }
+
+        const nextRow = rows[rows.indexOf(targetRow) + 1];
+        return nextRow?.items[0]?.element ?? null;
     }
 
     #resolveDirection(containerElement) {

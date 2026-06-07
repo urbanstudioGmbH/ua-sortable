@@ -7,6 +7,14 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.0.4] — 2026-06-07
+
+### Fixed
+- **Grid sorting stability**: Grid placeholder positioning now groups items by visual rows and uses row-aware midpoint checks instead of depending on the exact element under the pointer. This avoids placeholder oscillation in multi-row grids.
+- **Layout animation**: The `animation` option now performs FLIP-style layout animations for items that shift around the placeholder. `0` disables these animations.
+
+---
+
 ## [1.0.3] — 2026-06-06
 
 ### Fixed

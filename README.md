@@ -91,7 +91,7 @@ Or declarative HTML — auto-initialized by `UA_Sortable.observe()`:
 | `filter` | `string\|null` | `null` | CSS selector for items excluded from drag. |
 | `group` | `string\|null` | `null` | Group name for cross-list drag. |
 | `direction` | `string` | `"auto"` | `"vertical"`, `"horizontal"`, or `"auto"` (detects `flex-direction`; `grid`/`inline-grid` containers are treated as grid). |
-| `animation` | `number` | `150` | Ghost transition duration in ms. `0` = disabled. |
+| `animation` | `number` | `150` | Layout animation duration in ms when items shift around the placeholder. `0` = disabled. |
 | `dataIdAttr` | `string` | `"data-id"` | Attribute used to identify items in callbacks. |
 | `delay` | `number` | `0` | ms before drag starts after pointerdown. |
 | `delayOnTouchOnly` | `boolean` | `false` | Apply `delay` only for touch input. |

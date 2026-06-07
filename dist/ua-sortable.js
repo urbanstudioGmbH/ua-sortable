@@ -1,5 +1,5 @@
 /**
- * UA_Sortable v1.0.3 — IIFE build (browser global)
+ * UA_Sortable v1.0.4 — IIFE build (browser global)
  * Pointer-Events-based drag-and-drop sorting. No dependencies.
  *
  * @author  Marian Feiler <mf@urbanstudio.de>
@@ -53,6 +53,7 @@
         #rafId                   = null;
         #rafX                    = 0;
         #rafY                    = 0;
+        #layoutAnimations        = new Map();
         #boundHandlePointerDown   = null;
         #boundHandlePointerMove   = null;
         #boundHandlePointerUp     = null;
@@ -310,6 +311,8 @@
             }
             clearTimeout(this.#delayTimer);
             if (this.#rafId) { cancelAnimationFrame(this.#rafId); this.#rafId = null; }
+            this.#layoutAnimations.forEach(a => a.cancel());
+            this.#layoutAnimations.clear();
             document.body.style.userSelect = "";
             document.removeEventListener("pointermove",   this.#boundHandlePointerMove);
             document.removeEventListener("pointerup",     this.#boundHandlePointerUp);
@@ -328,20 +331,7 @@
             const dir = this.#resolveDirection(tc);
             let before = null;
             if (dir === "grid") {
-                let hi = -1;
-                for (let i = 0; i < children.length; i++) {
-                    const r = children[i].getBoundingClientRect();
-                    if (px >= r.left && px <= r.right && py >= r.top && py <= r.bottom) { hi = i; break; }
-                }
-                if (hi >= 0) {
-                    const r = children[hi].getBoundingClientRect();
-                    before = (px < r.left + r.width / 2) ? children[hi] : (children[hi + 1] ?? null);
-                } else {
-                    for (let i = 0; i < children.length; i++) {
-                        const r = children[i].getBoundingClientRect();
-                        if (py < r.top) { before = children[i]; break; }
-                    }
-                }
+                before = this.#getGridInsertBeforeElement(children, px, py);
             } else {
                 for (const s of children) {
                     const sr  = s.getBoundingClientRect();
@@ -350,10 +340,90 @@
                 }
             }
             if (before) {
-                if (this.#placeholderElement.nextSibling !== before) tc.insertBefore(this.#placeholderElement, before);
+                if (this.#placeholderElement.nextSibling !== before) {
+                    this.#animateLayoutChange(tc, () => tc.insertBefore(this.#placeholderElement, before));
+                }
             } else {
-                if (tc.lastElementChild !== this.#placeholderElement) tc.appendChild(this.#placeholderElement);
+                if (tc.lastElementChild !== this.#placeholderElement) {
+                    this.#animateLayoutChange(tc, () => tc.appendChild(this.#placeholderElement));
+                }
             }
+        }
+        #animateLayoutChange(container, changeDOM) {
+            const duration = Number(this.#options.animation) || 0;
+            if (duration <= 0 || typeof Element === "undefined" || !Element.prototype.animate) {
+                changeDOM();
+                return;
+            }
+            const getChildren = () => [...container.children].filter(c =>
+                c !== this.#draggedElement &&
+                c !== this.#placeholderElement &&
+                (!this.#options.filter || !c.matches(this.#options.filter))
+            );
+            const first = new Map(getChildren().map(c => [c, c.getBoundingClientRect()]));
+            changeDOM();
+            for (const c of getChildren()) {
+                const f = first.get(c);
+                if (!f) continue;
+                const l = c.getBoundingClientRect();
+                const dx = f.left - l.left;
+                const dy = f.top - l.top;
+                if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) continue;
+                this.#layoutAnimations.get(c)?.cancel();
+                const a = c.animate(
+                    [
+                        { transform: `translate(${dx}px, ${dy}px)` },
+                        { transform: "translate(0, 0)" },
+                    ],
+                    { duration, easing: "ease", fill: "both" }
+                );
+                this.#layoutAnimations.set(c, a);
+                a.finished
+                    .catch(() => {})
+                    .finally(() => {
+                        if (this.#layoutAnimations.get(c) === a) this.#layoutAnimations.delete(c);
+                    });
+            }
+        }
+        #getGridInsertBeforeElement(children, px, py) {
+            if (!children.length) return null;
+            const tol = 4;
+            const rows = [];
+            for (const el of children) {
+                const r = el.getBoundingClientRect();
+                let row = rows.find(candidate => Math.abs(candidate.top - r.top) <= tol);
+                if (!row) {
+                    row = { top: r.top, bottom: r.bottom, items: [] };
+                    rows.push(row);
+                }
+                row.top = Math.min(row.top, r.top);
+                row.bottom = Math.max(row.bottom, r.bottom);
+                row.items.push({ element: el, rect: r });
+            }
+            rows.sort((a, b) => a.top - b.top);
+            rows.forEach(row => row.items.sort((a, b) => a.rect.left - b.rect.left));
+            let targetRow = rows[rows.length - 1];
+            for (let i = 0; i < rows.length; i++) {
+                const row = rows[i];
+                const nextRow = rows[i + 1] ?? null;
+                if (py < row.top) {
+                    targetRow = row;
+                    break;
+                }
+                if (py <= row.bottom) {
+                    targetRow = row;
+                    break;
+                }
+                if (nextRow && py < nextRow.top) {
+                    targetRow = py < row.bottom + (nextRow.top - row.bottom) / 2 ? row : nextRow;
+                    break;
+                }
+            }
+            for (const item of targetRow.items) {
+                if (px < item.rect.left + item.rect.width / 2) return item.element;
+            }
+            const nextRow = rows[rows.indexOf(targetRow) + 1];
+            return nextRow?.items[0]?.element ?? null;
         }
         #resolveDirection(el) {
             if (this.#options.direction !== "auto") return this.#options.direction;
