@@ -1,7 +1,7 @@
 "use strict";
 
 /**
- * UA_Sortable v1.0.4 — Pointer-Events-based drag-and-drop sorting for lists and grids.
+ * UA_Sortable v1.0.5 — Pointer-Events-based drag-and-drop sorting for lists and grids.
  * No dependencies — no jQuery, no CDN, no external frameworks.
  * Supports: simple sorting, cross-list groups, auto-direction, filter, delay.
  *

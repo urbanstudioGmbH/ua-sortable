@@ -7,6 +7,14 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [1.0.5] — 2026-08-27
+
+### Changed
+- **npm publishing**: Switched the release workflow from a long-lived npm token to trusted publishing with GitHub Actions OIDC.
+- **cdnjs metadata**: Updated the repository metadata to the current cdnjs package schema.
+
+---
+
 ## [1.0.4] — 2026-06-07
 
 ### Fixed

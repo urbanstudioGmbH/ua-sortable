@@ -1,5 +1,5 @@
 /**
- * UA_Sortable v1.0.4 — IIFE build (browser global)
+ * UA_Sortable v1.0.5 — IIFE build (browser global)
  * Pointer-Events-based drag-and-drop sorting. No dependencies.
  *
  * @author  Marian Feiler <mf@urbanstudio.de>

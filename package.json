@@ -1,6 +1,6 @@
 {
   "name": "@urbanstudio/ua-sortable",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "Pointer-Events-based drag-and-drop sorting for lists and grids. No dependencies.",
   "author": "Marian Feiler <mf@urbanstudio.de> (https://urbanstudio.de)",
   "license": "MIT",
